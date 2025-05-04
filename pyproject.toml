@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "itu_auction"
+version = "0.1"
+description = "A customizable implementation of ITU auction algorithms."
+authors = [
+    { name = "Enzo Di Pasquale" }
+]
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "torch"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
