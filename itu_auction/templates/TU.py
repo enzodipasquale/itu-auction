@@ -11,7 +11,7 @@ def TU_template(Φ_i_j):
 
     def get_V_i_j(u_i, j_id, i_id=None):
         if i_id is None:
-            return Φ_i_j[:, j_id] - u_i.unsqueeze(0)
+            return Φ_i_j[:, j_id] - u_i.unsqueeze(1)
         else:
             return Φ_i_j[i_id, j_id] - u_i
 

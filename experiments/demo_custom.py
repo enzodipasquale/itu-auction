@@ -20,15 +20,15 @@ def get_V_i_j(u_i, j_id, i_id=None):
         return Φ_i_j[i_id, j_id] - u_i
 
 TU_example = ITUauction(num_i, num_j, get_U_i_j, get_V_i_j)
-u_i, v_j, mu_i_j = TU_example.forward_auction(tol_ε= 1e-5)
-CS, feas, IR_i, IR_j = TU_example.check_equilibrium(u_i, v_j, mu_i_j)
+eps = 1e-3
+u_i, v_j, mu_i_j = market.forward_auction(eps= eps)
+CS, feas, IR_i, IR_j = market.check_equilibrium(u_i, v_j, mu_i_j, eps)
 
-print("CS:", CS)
-print("feas:", feas)
-print("IR_i:", IR_i)
-print("IR_j:", IR_j)
+# Check duality
+dual = u_i.sum() + v_j.sum()
+primal = (mu_i_j * Φ_i_j).sum()
 
-
-print(u_i.sum() + v_j.sum())
-print((mu_i_j* Φ_i_j).sum())
+print("\n=== Duality Check ===")
+print(f"Dual value                : {dual.item():.4f}")
+print(f"Primal value (total cost) : {primal.item():.4f}")
 
