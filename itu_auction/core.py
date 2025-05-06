@@ -17,10 +17,10 @@ class ITUauction:
         self.u_0 = lb[0]
         self.v_0 = lb[1]
 
-        self.v_j_init = torch.full((self.num_j,), self.v_0, dtype=torch.float, device=self.device)
-        self.u_i_init = torch.full((self.num_i,), self.u_0 , dtype=torch.float, device=self.device)
-        self.mu_i_init = torch.full((self.num_i,), -1, dtype=torch.long, device=self.device)
-        self.mu_j_init = torch.full((self.num_j,), -1, dtype=torch.long, device=self.device)
+        self.init_v_j = torch.full((self.num_j,), self.v_0, dtype=torch.float, device=self.device)
+        self.init_u_i = torch.full((self.num_i,), self.u_0 , dtype=torch.float, device=self.device)
+        self.init_mu_i = torch.full((self.num_i,), -1, dtype=torch.long, device=self.device)
+        self.init_mu_j = torch.full((self.num_j,), -1, dtype=torch.long, device=self.device)
 
         self.method = None
         self.sampling_rate = None
@@ -118,8 +118,8 @@ class ITUauction:
     def forward_auction(self, init_v_j= None, init_mu_i= None, eps = 0, return_mu_i_j = False):
 
         # Initialize prices and partial assignment
-        v_j = self.v_j_init.clone() if init_v_j is None else init_v_j
-        mu_i = self.mu_i_init.clone() if init_mu_i is None else init_mu_i
+        v_j = self.init_v_j.clone() if init_v_j is None else init_v_j
+        mu_i = self.init_mu_i.clone() if init_mu_i is None else init_mu_i
         unmatched_i = self.all_i.clone()
 
         # Iterate until all bidders are matched
@@ -194,8 +194,8 @@ class ITUauction:
 
 
     def reverse_auction(self, init_u_i=None, init_mu_j=None, eps=0, return_mu_i_j = False):
-        u_i = self.u_i_init.clone() if init_u_i is None else init_u_i
-        mu_j = self.mu_j_init.clone() if init_mu_j is None else init_mu_j
+        u_i = self.init_u_i.clone() if init_u_i is None else init_u_i
+        mu_j = self.init_mu_j.clone() if init_mu_j is None else init_mu_j
         unmatched_j = self.all_j.clone()
 
         while unmatched_j.numel() > 0:
@@ -220,7 +220,7 @@ class ITUauction:
     #   Scaling method
     def forward_reverse_scaling(self, eps_init, eps_target, scaling_factor):
         eps = eps_init
-        v_j = self.v_j_init.clone()
+        v_j = self.init_v_j.clone()
 
         while True:
             u_i, v_j, mu_i_j  = self.forward_auction(init_v_j = v_j,  eps= eps)
@@ -230,8 +230,9 @@ class ITUauction:
                 break
 
         u_i, v_j, mu_i_j  = self.reverse_auction(init_u_i = u_i, eps= eps, return_mu_i_j= True)
-        v_j[mu_i_j.sum(dim=0) == 0] = self.v_0
+        # v_j[mu_i_j.sum(dim=0) == 0] = self.v_0
         mu_i = torch.where(mu_i_j.any(dim=1), mu_i_j.int().argmax(dim=1), -1)
+        # mu_i = self.init_mu_i.clone()
         u_i, v_j, mu_i_j  = self.forward_auction(init_v_j = v_j, init_mu_i= mu_i, eps= eps, return_mu_i_j= True)
         
 
