@@ -14,9 +14,17 @@ class ITUauction:
         self._get_U_i_j = get_U_i_j
         self._get_V_i_j = get_V_i_j
 
-        self.lb_i = lb[0]
-        self.lb_j = lb[1]
+        self.u_0 = lb[0]
+        self.v_0 = lb[1]
 
+        self.v_j_init = torch.full((self.num_j,), self.v_0, dtype=torch.float, device=self.device)
+        self.u_i_init = torch.full((self.num_i,), self.u_0 , dtype=torch.float, device=self.device)
+        self.mu_i_init = torch.full((self.num_i,), -1, dtype=torch.long, device=self.device)
+        self.mu_j_init = torch.full((self.num_j,), -1, dtype=torch.long, device=self.device)
+
+        self.method = None
+        self.sampling_rate = None
+        
     def get_U_i_j(self, v_j, i_id = None, j_id = None):
         i_id = i_id if i_id is not None else self.all_i
 
@@ -35,10 +43,10 @@ class ITUauction:
 
 
     def check_equilibrium(self, u_i, v_j, mu_i_j, eps = 0):
-        CS = (self.get_U_i_j(v_j).amax(dim=1) - u_i).max().item()
+        CS = (self.get_U_i_j(v_j).amax(dim=1) - u_i).amax()
         feas = torch.all((mu_i_j.sum(dim=1) <= 1)) and torch.all((mu_i_j.sum(dim=0) <= 1)) 
-        IR_i =  torch.all(u_i[mu_i_j.sum(dim=1) == 0] <= self.lb_i + eps)
-        IR_j =  torch.all(v_j[mu_i_j.sum(dim=0) == 0] <= self.lb_j + eps)
+        IR_i =  torch.all(u_i[mu_i_j.sum(dim=1) == 0] <= self.u_0 + eps)
+        IR_j =  torch.all(v_j[mu_i_j.sum(dim=0) == 0] <= self.v_0 + eps)
 
         print("=== Equilibrium Conditions ===")
         print(f"Complementary Slackness      : {CS:.4f}")
@@ -55,7 +63,6 @@ class ITUauction:
 
 
     # Forward auction
-
     def _forward_bid(self, i_id, v_j, eps):
 
         # Compute top 2 values and indices at current prices
@@ -63,7 +70,7 @@ class ITUauction:
         top2 = U_i_j.topk(2, dim=1) 
 
         # Filter out bidders preferring the outside option
-        bidding = top2.values[:, 0] > self.lb_i + eps
+        bidding = top2.values[:, 0] >= self.u_0 + eps
         bidder_id, out_id = i_id[bidding], i_id[~bidding]
 
         # Compute selected item and second best value for each bidder
@@ -75,14 +82,13 @@ class ITUauction:
 
         return out_id, bidder_id, j_i, bid_i
 
-    # @torch.jit.trace
     def _forward_assign(self, bidder_id, j_i, bid_i):  
         unique_id, inverse = j_i.unique(return_inverse=True)
 
         best_bid = torch.empty(len(unique_id), dtype=bid_i.dtype, device=self.device)
         best_bid.scatter_reduce_(0, inverse, bid_i, reduce='amax', include_self=False)
 
-        is_best = bid_i == best_bid[inverse]
+        is_best = (bid_i == best_bid[inverse])
         winner = torch.empty(len(unique_id),  dtype=bidder_id.dtype, device=self.device)
         winner[inverse[is_best]] = bidder_id[is_best]
 
@@ -97,37 +103,41 @@ class ITUauction:
         unique_id, winner, best_bid = self._forward_assign(bidder_id, j_i, bid_i)
 
         # Update assignment
-        mask = (mu_i.unsqueeze(1) == unique_id.unsqueeze(0)).any(dim=1)
-        mu_i[mask] = -1 
+        reset_i = torch.isin(mu_i, unique_id)
+        mu_i[reset_i] = -1
         mu_i[winner] = unique_id
-
-        # mu_i[mu_j[unique_id]] = -1
-        # mu_i[winner] = unique_id
-        # mu_j[unique_id] = winner
 
         # Update prices
         v_j[unique_id] = best_bid
 
         # Update unmatched bidders
-        unmatched_i = (mu_i == -1).nonzero(as_tuple=True)[0].contiguous()
+        unmatched_i = (mu_i == -1).nonzero(as_tuple=True)[0]#.contiguous()
 
         return unmatched_i, v_j, mu_i
 
-    def forward_auction(self, init_v_j= None, init_mu_i= None, eps = 0):
+    def forward_auction(self, init_v_j= None, init_mu_i= None, eps = 0, return_mu_i_j = False):
 
         # Initialize prices and partial assignment
-        v_j = torch.full((self.num_j,), self.lb_j, dtype=torch.float, device=self.device) if init_v_j is None else init_v_j
-        mu_i = torch.full((self.num_i,), -1, dtype=torch.long, device=self.device) if init_mu_i is None else init_mu_i
-        # mu_j = torch.full((self.num_j,), -1, dtype=torch.long, device=self.device) if init_mu_j is None else init_mu_j
-        unmatched_i = (mu_i == -1).nonzero(as_tuple=True)[0].contiguous()
+        v_j = self.v_j_init.clone() if init_v_j is None else init_v_j
+        mu_i = self.mu_i_init.clone() if init_mu_i is None else init_mu_i
+        unmatched_i = self.all_i.clone()
 
         # Iterate until all bidders are matched
         while unmatched_i.numel() > 0:
+            if self.method == "GS":
+                unmatched_i = unmatched_i[:1]
+            if self.method == "batched":
+                batch_size = max(1, int(self.sampling_rate * unmatched_i.size(0)))
+                batch = unmatched_i[torch.randperm(unmatched_i.size(0))[:batch_size]]
+
             unmatched_i, v_j, mu_i = self._forward_iteration(unmatched_i, v_j, mu_i, eps)
 
         # Compute utility for each bidder and binary assignment matrix
-        u_i = self.get_U_i_j(v_j).amax(dim=1).clamp(min=self.lb_i)
-        mu_i_j = mu_i.unsqueeze(1) == self.all_j.unsqueeze(0)
+        u_i = self.get_U_i_j(v_j).amax(dim=1).clamp(min=self.u_0)
+        if return_mu_i_j:
+            mu_i_j = mu_i.unsqueeze(1) == self.all_j.unsqueeze(0)
+        else:
+            mu_i_j = None
 
         return u_i, v_j, mu_i_j
 
@@ -141,7 +151,7 @@ class ITUauction:
         top2 = V_i_j.topk(2, dim=0)
 
         # Filter out items preferring the outside option
-        bidding = top2.values[0] > self.lb_j + eps
+        bidding = top2.values[0] >= self.v_0 + eps
         bidder_id, out_id = j_id[bidding], j_id[~bidding]
 
         # Compute selected agent and second best value for each item
@@ -160,7 +170,7 @@ class ITUauction:
         best_bid = torch.empty(len(unique_id), dtype=bid_j.dtype, device=self.device)
         best_bid.scatter_reduce_(0, inverse, bid_j, reduce='amax', include_self=False)
 
-        is_best = bid_j == best_bid[inverse]
+        is_best = (bid_j == best_bid[inverse])
         winner = torch.empty(len(unique_id), dtype=bidder_id.dtype, device=self.device)
         winner[inverse[is_best]] = bidder_id[is_best]
 
@@ -173,56 +183,57 @@ class ITUauction:
 
         unique_id, winner, best_bid = self._reverse_assign(bidder_id, i_j, bid_j)
 
-        mask  = (mu_j.unsqueeze(1) == unique_id.unsqueeze(0)).any(dim=1)
-        mu_j[mask] = -1
+        reset_j = torch.isin(mu_j, unique_id)
+        mu_j[reset_j] = -1
         mu_j[winner] = unique_id
 
         u_i[unique_id] = best_bid
-        unmatched_j = (mu_j == -1).nonzero(as_tuple=True)[0].contiguous()
+        unmatched_j = (mu_j == -1).nonzero(as_tuple=True)[0]#.contiguous()
 
         return unmatched_j, u_i, mu_j
 
 
-    def reverse_auction(self, init_u_i=None, init_mu_j=None, eps=0):
-        u_i = torch.full((self.num_i,), self.lb_i, dtype=torch.float, device=self.device) if init_u_i is None else init_u_i
-        mu_j = torch.full((self.num_j,), -1, dtype=torch.long, device=self.device) if init_mu_j is None else init_mu_j
-        unmatched_j = (mu_j == -1).nonzero(as_tuple=True)[0].contiguous()
+    def reverse_auction(self, init_u_i=None, init_mu_j=None, eps=0, return_mu_i_j = False):
+        u_i = self.u_i_init.clone() if init_u_i is None else init_u_i
+        mu_j = self.mu_j_init.clone() if init_mu_j is None else init_mu_j
+        unmatched_j = self.all_j.clone()
 
         while unmatched_j.numel() > 0:
+            if self.method == "GS":
+                unmatched_j = unmatched_j[:1]
+            elif self.method == "batched":
+                batch_size = max(1, int(self.sampling_rate * unmatched_j.size(0)))
+                batch = unmatched_j[torch.randperm(unmatched_j.size(0))[:batch_size]]
+
             unmatched_j, u_i, mu_j = self._reverse_iteration(unmatched_j, u_i, mu_j, eps)
 
-        v_j = self.get_V_i_j(u_i).amax(dim=0).clamp(min=self.lb_j)
-        mu_i_j = mu_j.unsqueeze(0) == self.all_i.unsqueeze(1)
+        v_j = self.get_V_i_j(u_i).amax(dim=0).clamp(min=self.v_0)
+
+        if return_mu_i_j:
+            mu_i_j = mu_j.unsqueeze(0) == self.all_i.unsqueeze(1)
+        else:
+            mu_i_j = None
 
         return u_i, v_j, mu_i_j
 
 
-    # Scaling method
-
-    # def forward_auction_scaling(self, eps_init, eps_target, scaling_factor):
-    #     eps = eps_init
-    #     v_j = torch.full((self.num_j,), self.lb_j, dtype=torch.float, device=self.device)
-        
-    #     while True:
-    #         u_i, v_j, mu_i_j = self.forward_auction(init_v_j = v_j, eps = eps)
-    #         if eps <= eps_target:
-    #             break
-    #         eps *= scaling_factor
-
-    #     return u_i, v_j, mu_i_j
-
-
+    #   Scaling method
     def forward_reverse_scaling(self, eps_init, eps_target, scaling_factor):
         eps = eps_init
-        v_j = torch.full((self.num_j,), self.lb_j, dtype=torch.float, device=self.device)
-        mu_i = torch.full((self.num_i,), -1, dtype=torch.long, device=self.device) 
-        
+        v_j = self.v_j_init.clone()
+
         while True:
-            u_i, v_j, mu_i_j = self.forward_auction(init_v_j= v_j, eps = eps)
+            u_i, v_j, mu_i_j  = self.forward_auction(init_v_j = v_j,  eps= eps)
+            eps *=  scaling_factor
+            u_i, v_j, mu_i_j  = self.reverse_auction(init_u_i = u_i, eps= eps)
             if eps <= eps_target:
                 break
-            eps *= scaling_factor
-            u_i, v_j, mu_i_j = self.reverse_auction(init_u_i= u_i, eps = eps)
+
+        u_i, v_j, mu_i_j  = self.reverse_auction(init_u_i = u_i, eps= eps, return_mu_i_j= True)
+        v_j[mu_i_j.sum(dim=0) == 0] = self.v_0
+        mu_i = torch.where(mu_i_j.any(dim=1), mu_i_j.int().argmax(dim=1), -1)
+        u_i, v_j, mu_i_j  = self.forward_auction(init_v_j = v_j, init_mu_i= mu_i, eps= eps, return_mu_i_j= True)
+        
 
         return u_i, v_j, mu_i_j
 

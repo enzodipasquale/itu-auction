@@ -1,1 +1,2 @@
-* Check scatter_max
+* Add randomization
+* Add similar objects
