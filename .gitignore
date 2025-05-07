@@ -1,3 +1,4 @@
 *.ext3
 *.sh
-# *.ext3.gz
+*.ext3.gz
+*.sh.1
