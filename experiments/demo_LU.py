@@ -13,7 +13,7 @@ for _ in range(200):
 
     market = get_template("LU")(Φ_i_j, α_i_j)
 
-    # Solve 
+    # Solve equilibrium
     eps = 1e-3
     scaling_factor = 0.5
     eps_init = 10

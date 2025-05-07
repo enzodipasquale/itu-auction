@@ -54,18 +54,12 @@ class ITUauction:
         print(f"Individual Rationality (i)   : {IR_i}")
         print(f"Individual Rationality (j)   : {IR_j}")
 
-        if IR_i == False:
-            u_i_unmatched = u_i[mu_i_j.sum(dim=1) == 0]
-            print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
-            print(u_i_unmatched[u_i_unmatched > self.u_0 + eps])
-            print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
+        satisfied = CS <= eps and feas and IR_i and IR_j
 
-        if IR_j == False:
-            v_j_unmatched = v_j[mu_i_j.sum(dim=0) == 0]
-            print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
-            print(v_j_unmatched[v_j_unmatched > self.v_0 + eps])
-            print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
-
+        if not satisfied:
+            print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
+            print("=== Equilibrium Conditions Failed ===")
+            print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
 
         return CS, feas, IR_i, IR_j
 
@@ -150,7 +144,6 @@ class ITUauction:
         return u_i, v_j, mu_i
 
 
-
    # Reverse auction methods
     def _reverse_bid(self, j_id, u_i, eps):
         # Compute top 2 values and indices at current prices
@@ -222,7 +215,7 @@ class ITUauction:
         return u_i, v_j, mu_j
 
 
-    #   Scaling method
+    # Scaling method
     def forward_reverse_scaling(self, eps_init, eps_target, scaling_factor):
         eps = eps_init
         v_j = self.init_v_j.clone()

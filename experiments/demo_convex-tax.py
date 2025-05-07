@@ -6,7 +6,6 @@ import time
 num_i = 606
 num_j = 700
 
-
 for _ in range(200):
     torch.manual_seed(42)
     α_i_j = torch.randint(0, 5, (num_i, 1)) * torch.randint(0, 5, (1, num_j))
@@ -16,7 +15,8 @@ for _ in range(200):
 
     market = get_template("convex_tax")(α_i_j, γ_i_j, t_k, τ_k)
     # market.method = "GS"
-    # Solve 
+
+    # Solve equilibrium
     eps = 1e-3
     scaling_factor = 0.5
     eps_init = 10
