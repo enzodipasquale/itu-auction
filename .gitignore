@@ -5,3 +5,4 @@
 singularity.txt
 *.sbatch
 *.out
+HPC_commands.txt
