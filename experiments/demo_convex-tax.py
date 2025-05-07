@@ -15,7 +15,7 @@ for _ in range(200):
     τ_k = torch.tensor([.1, .12, .22, .24, .32, .35, .37])
 
     market = get_template("convex_tax")(α_i_j, γ_i_j, t_k, τ_k)
-
+    # market.method = "GS"
     # Solve 
     eps = 1e-3
     scaling_factor = 0.5

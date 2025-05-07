@@ -55,9 +55,17 @@ class ITUauction:
         print(f"Individual Rationality (j)   : {IR_j}")
 
         if IR_i == False:
-            print(u_i[mu_i_j.sum(dim=1) == 0])
+            u_i_unmatched = u_i[mu_i_j.sum(dim=1) == 0]
+            print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
+            print(u_i_unmatched[u_i_unmatched > self.u_0 + eps])
+            print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
+
         if IR_j == False:
-            print(v_j[mu_i_j.sum(dim=0) == 0])
+            v_j_unmatched = v_j[mu_i_j.sum(dim=0) == 0]
+            print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
+            print(v_j_unmatched[v_j_unmatched > self.v_0 + eps])
+            print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
+
 
         return CS, feas, IR_i, IR_j
 
@@ -104,6 +112,7 @@ class ITUauction:
 
         # Update assignment
         reset_i = torch.isin(mu_i, unique_id)
+
         mu_i[reset_i] = -1
         mu_i[winner] = unique_id
 
@@ -120,7 +129,7 @@ class ITUauction:
         # Initialize prices and partial assignment
         v_j = self.init_v_j.clone() if init_v_j is None else init_v_j
         mu_i = self.init_mu_i.clone() if init_mu_i is None else init_mu_i
-        unmatched_i = self.all_i.clone()
+        unmatched_i = (mu_i == -1).nonzero(as_tuple=True)[0]
 
         # Iterate until all bidders are matched
         while unmatched_i.numel() > 0:
@@ -136,10 +145,9 @@ class ITUauction:
         u_i = self.get_U_i_j(v_j).amax(dim=1).clamp(min=self.u_0)
         if return_mu_i_j:
             mu_i_j = mu_i.unsqueeze(1) == self.all_j.unsqueeze(0)
-        else:
-            mu_i_j = None
+            return u_i, v_j, mu_i_j
 
-        return u_i, v_j, mu_i_j
+        return u_i, v_j, mu_i
 
 
 
@@ -159,10 +167,10 @@ class ITUauction:
         w_j = top2.values[1, bidding]
 
         # Compute bids
-        bid_j = self.get_U_i_j(w_j - eps, i_j, bidder_id)
+        # bid_j = self.get_U_i_j(w_j - eps, i_j, bidder_id)
+        bid_j = self.get_U_i_j(w_j, i_j, bidder_id) + eps
 
         return out_id, bidder_id, i_j, bid_j
-
 
     def _reverse_assign(self, bidder_id, i_j, bid_j):
         unique_id, inverse = i_j.unique(return_inverse=True)
@@ -175,7 +183,6 @@ class ITUauction:
         winner[inverse[is_best]] = bidder_id[is_best]
 
         return unique_id, winner, best_bid
-
 
     def _reverse_iteration(self, unmatched_j, u_i, mu_j, eps):
         out_id, bidder_id, i_j, bid_j = self._reverse_bid(unmatched_j, u_i, eps)
@@ -192,11 +199,10 @@ class ITUauction:
 
         return unmatched_j, u_i, mu_j
 
-
     def reverse_auction(self, init_u_i=None, init_mu_j=None, eps=0, return_mu_i_j = False):
         u_i = self.init_u_i.clone() if init_u_i is None else init_u_i
         mu_j = self.init_mu_j.clone() if init_mu_j is None else init_mu_j
-        unmatched_j = self.all_j.clone()
+        unmatched_j = (mu_j == -1).nonzero(as_tuple=True)[0]
 
         while unmatched_j.numel() > 0:
             if self.method == "GS":
@@ -211,10 +217,9 @@ class ITUauction:
 
         if return_mu_i_j:
             mu_i_j = mu_j.unsqueeze(0) == self.all_i.unsqueeze(1)
-        else:
-            mu_i_j = None
+            return u_i, v_j, mu_i_j
 
-        return u_i, v_j, mu_i_j
+        return u_i, v_j, mu_j
 
 
     #   Scaling method
@@ -223,18 +228,18 @@ class ITUauction:
         v_j = self.init_v_j.clone()
 
         while True:
-            u_i, v_j, mu_i_j  = self.forward_auction(init_v_j = v_j,  eps= eps)
+            u_i, v_j, mu_i  = self.forward_auction(init_v_j = v_j,  eps= eps)
             eps *=  scaling_factor
-            u_i, v_j, mu_i_j  = self.reverse_auction(init_u_i = u_i, eps= eps)
+            u_i, v_j, mu_j  = self.reverse_auction(init_u_i = u_i, eps= eps)
             if eps <= eps_target:
                 break
 
         u_i, v_j, mu_i_j  = self.reverse_auction(init_u_i = u_i, eps= eps, return_mu_i_j= True)
-        # v_j[mu_i_j.sum(dim=0) == 0] = self.v_0
         mu_i = torch.where(mu_i_j.any(dim=1), mu_i_j.int().argmax(dim=1), -1)
-        # mu_i = self.init_mu_i.clone()
+        violations_i = (u_i > self.u_0) & (mu_i_j.sum(dim=1) == 0)
+        mu_i[violations_i] = -1
+
         u_i, v_j, mu_i_j  = self.forward_auction(init_v_j = v_j, init_mu_i= mu_i, eps= eps, return_mu_i_j= True)
-        
 
         return u_i, v_j, mu_i_j
 
