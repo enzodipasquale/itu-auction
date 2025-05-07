@@ -2,3 +2,6 @@
 *.sh
 *.ext3.gz
 *.sh.1
+singularity.txt
+*.sbatch
+*.out
