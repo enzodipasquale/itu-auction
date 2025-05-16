@@ -1,5 +1,6 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
+*.pyc
 *.py[cod]
 *$py.class
 
@@ -30,11 +31,10 @@ build/
 # macOS files
 .DS_Store
 
-# Your previous stuff
+# Other
 *.ext3
 *.ext3.gz
 *.sh
 *.sh.1
-singularity.txt
 *.sbatch
 *.out
