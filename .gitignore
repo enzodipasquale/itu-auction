@@ -1,3 +1,36 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+.env/
+.auction/
+
+# Logs and databases
+*.log
+*.sqlite3
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# VSCode settings
+.vscode/
+
+# macOS files
+.DS_Store
+
+# Your previous stuff
 *.ext3
 *.ext3.gz
 *.sh
@@ -5,4 +38,3 @@
 singularity.txt
 *.sbatch
 *.out
-*.egg-info/

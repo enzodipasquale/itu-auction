@@ -6,7 +6,7 @@ import time
 num_i = 600
 num_j = 700
 
-for _ in range(200):
+for _ in range(1):
     torch.manual_seed(_)
     Φ_i_j = (torch.randint(0, 10, (num_i, 1)) - torch.randint(0, 10, (1,num_j ))) **2
     α_i_j = torch.randint(1, 10, (num_i, num_j))
