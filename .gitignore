@@ -1,8 +1,8 @@
 *.ext3
-*.sh
 *.ext3.gz
+*.sh
 *.sh.1
 singularity.txt
 *.sbatch
 *.out
-HPC_commands.txt
+*.egg-info/
