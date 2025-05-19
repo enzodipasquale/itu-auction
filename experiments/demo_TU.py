@@ -2,14 +2,18 @@ import torch
 from itu_auction import get_template
 import time
 # Example of using the TU template
-num_i = 600
-num_j = 500
+num_i = 10000
+num_j = 9000
 
 for _ in range(200):
     print(_)
     torch.manual_seed(_)
-    Φ_i_j = (torch.randint(0, 9, (num_i, 1)) - torch.randint(0, 9, (1,num_j ))) **2
+    Φ_i_j = (
+            (torch.randint(0, 3, (num_i, 1)) - torch.randint(0, 3, (1,num_j ))) **2   
+            #- (torch.randint(0, 3, (num_i, 1)) - torch.randint(0, 3, (1,num_j ))) **2
+            )
     market = get_template("TU")(Φ_i_j)
+    # market.lb = (0, - torch.inf)
     # market.method = "GS"
     # market.sampling_rate = 0.1
 
