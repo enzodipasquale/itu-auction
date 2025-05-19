@@ -1,8 +1,0 @@
-Metadata-Version: 2.4
-Name: itu_auction
-Version: 0.1
-Summary: A customizable implementation of ITU auction algorithms.
-Author: Enzo Di Pasquale
-Requires-Python: >=3.8
-Description-Content-Type: text/markdown
-Requires-Dist: torch
