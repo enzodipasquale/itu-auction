@@ -1,7 +1,7 @@
 import torch
 from itu_auction import get_template
 import time
-# Example of using the TU template
+
 num_i = 1000
 num_j = 900
 
@@ -10,7 +10,7 @@ for iter in range(100):
     torch.manual_seed(iter)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     Φ_i_j = (
-        (torch.randint(0, 3, (num_i, 1), device=device) - torch.randint(0, 3, (1, num_j), device=device)) ** 2
+        (torch.randint(0, 3, (num_i, 1), device=device) * torch.randint(0, 3, (1, num_j), device=device)) ** 2
         )
     market = get_template("TU")(Φ_i_j)
     # market.method = "GS"

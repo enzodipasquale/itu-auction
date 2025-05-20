@@ -27,7 +27,7 @@ class ITUauction:
 
 
     def check_equilibrium(self, u_i, v_j, mu_i_j, eps = 0):
-        CS = (self.get_U_i_j(v_j, i_id = self.all_i).amax(dim=1) - u_i).amax()
+        CS = (self.get_U_i_j(v_j, self.all_i).amax(dim=1) - u_i).amax()
         feas = torch.all((mu_i_j.sum(dim=1) <= 1)) and torch.all((mu_i_j.sum(dim=0) <= 1)) 
         IR_i =  torch.all(u_i[mu_i_j.sum(dim=1) == 0] <= self.u_0 + eps)
         IR_j =  torch.all(v_j[mu_i_j.sum(dim=0) == 0] <= self.v_0 + eps)
@@ -61,7 +61,8 @@ class ITUauction:
 
         # Compute selected item and second best value for each bidder
         j_i = top2.indices[bidding, 0]
-        w_i = top2.values[bidding, 1]  
+        # w_i = top2.values[bidding, 1]  
+        w_i = torch.clamp(top2.values[bidding, 1], min=self.u_0)
 
         # Compute bids
         bid_i = self.get_V_i_j(w_i - eps, j_i, bidder_id)
@@ -120,7 +121,7 @@ class ITUauction:
             unmatched_i, v_j, mu_i = self._forward_iteration(unmatched_i, v_j, mu_i, eps)
 
         # Compute utility for each bidder and binary assignment matrix
-        u_i = self.get_U_i_j(v_j, i_id = self.all_i).amax(dim=1).clamp(min=self.u_0)
+        u_i = self.get_U_i_j(v_j, self.all_i).amax(dim=1).clamp(min=self.u_0)
         if return_mu_i_j:
             mu_i_j = mu_i.unsqueeze(1) == self.all_j.unsqueeze(0)
             return u_i, v_j, mu_i_j
@@ -141,7 +142,8 @@ class ITUauction:
 
         # Compute selected agent and second best value for each item
         i_j = top2.indices[0, bidding]
-        w_j = top2.values[1, bidding]
+        # w_j = top2.values[1, bidding]
+        w_j = torch.clamp(top2.values[1, bidding], min=self.v_0)
 
         # Compute bids
         # bid_j = self.get_U_i_j(w_j - eps, i_j, bidder_id)

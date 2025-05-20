@@ -38,3 +38,4 @@ build/
 *.sh.1
 *.sbatch
 *.out
+pytorch_scatter/
