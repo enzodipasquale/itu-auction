@@ -3,9 +3,9 @@ from itu_auction import get_template
 import time
 
 num_i = 1000
-num_j = 900
+num_j = 980
 
-for iter in range(100):
+for iter in range(200):
     print(iter)
     torch.manual_seed(iter)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -19,7 +19,7 @@ for iter in range(100):
     # Solve equilibrium
     eps = 1e-3
     scaling_factor = 0.5
-    eps_init = 10
+    eps_init = 50
     tic = time.time()
     # u_i, v_j, mu_i_j = market.forward_auction(eps= eps, return_mu_i_j=True)
     # u_i, v_j, mu_i_j = market.reverse_auction(eps= eps, return_mu_i_j=True)

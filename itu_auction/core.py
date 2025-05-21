@@ -219,6 +219,8 @@ class ITUauction:
         mu_i[violations_i] = -1
 
         u_i, v_j, mu_i_j  = self.forward_auction(init_v_j = v_j, init_mu_i= mu_i, eps= eps, return_mu_i_j= True)
+        # u_i, v_j, mu_i_j  = self.forward_auction(init_v_j = v_j, eps= eps, return_mu_i_j= True)
+
 
         return u_i, v_j, mu_i_j
 

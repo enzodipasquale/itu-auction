@@ -2,13 +2,13 @@ import torch
 from batched_itu_auction import ITUauction
 import time
 
-num_i = 50
-num_j = 70
+num_i = 500
+num_j = 600
 num_t = 10
 
 
 
-torch.manual_seed(0)
+torch.manual_seed(234524354)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 Φ_t_i_j = torch.stack([
                         (torch.randint(0, 3, (num_i, 1), device=device) - torch.randint(0, 3, (1, num_j), device=device)) ** 2
@@ -30,13 +30,26 @@ def get_V_t_i_j(u_t_i, t_id, j_id, i_id=None):
                             
 market = ITUauction(num_i, num_j, num_t, get_U_t_i_j = get_U_t_i_j, get_V_t_i_j = get_V_t_i_j)
 
+eps_init = 10
 eps = 1e-3
-u_t_i, v_t_j, mu_t_i_j = market.forward_auction(eps = eps, return_mu_t_i_j = True)
+scaling_factor = .5
+tic = time.time()
+# u_t_i, v_t_j, mu_t_i_j = market.forward_auction(eps = eps, return_mu_t_i_j = True)
+# u_t_i, v_t_j, mu_t_i_j = market.reverse_auction(eps = eps, return_mu_t_i_j = True)
+u_t_i, v_t_j, mu_t_i_j = market.forward_reverse_scaling(eps_init = eps_init, eps_target = eps, scaling_factor = scaling_factor)
+
+
+# mu_t_i = torch.tensor([[ 4, -1,  0,  5, -1]])
+# u_t_i, v_t_j, mu_t_i_j = market.forward_auction(eps = eps, init_mu_t_i = mu_t_i ,return_mu_t_i_j = True)
+
+
 market.check_equilibrium(u_t_i, v_t_j, mu_t_i_j, eps = eps)
 
 
-
-# Check duality
-primal_value_t = (Φ_t_i_j * mu_t_i_j).sum((1,2))
-dual_value_t = u_t_i.sum(1) + v_t_j.sum(1)
-print("Difference: ", dual_value_t - primal_value_t)
+# toc = time.time()
+# print('-'*50)
+# print(f"Time taken for auction: {toc - tic:.4f} seconds")
+# # Check duality
+# primal_value_t = (Φ_t_i_j * mu_t_i_j).sum((1,2))
+# dual_value_t = u_t_i.sum(1) + v_t_j.sum(1)
+# print("Duality Gap: ", (dual_value_t - primal_value_t).amax())
