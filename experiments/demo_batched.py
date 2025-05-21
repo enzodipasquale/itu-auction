@@ -14,10 +14,6 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 Φ_t_i_j = torch.stack([(torch.randint(0, 3, (num_i, 1), device=device) * torch.randint(0, 3, (1, num_j), device=device)) 
                         for _ in range(num_t)], dim=0)
 
-Φ_t_i_j = Φ_t_i_j[25].unsqueeze(0)
-num_t = 1
-
-
 def get_U_t_i_j(v_t_j, t_id, i_id, j_id=None):
     if j_id is None:
         return Φ_t_i_j[t_id, i_id] - v_t_j[t_id]
@@ -33,7 +29,7 @@ def get_V_t_i_j(u_t_i, t_id, j_id, i_id=None):
 market = ITUauction(num_i, num_j, num_t, get_U_t_i_j = get_U_t_i_j, get_V_t_i_j = get_V_t_i_j)
 
 eps_init = 10
-eps = 1e-5
+eps = 1e-4
 scaling_factor = .5
 tic = time.time()
 # u_t_i, v_t_j, mu_t_i_j = market.forward_auction(eps = eps, return_mu_t_i_j = True)
@@ -44,30 +40,11 @@ market.check_equilibrium(u_t_i, v_t_j, mu_t_i_j, eps = eps)
 
 toc = time.time()
 print('-'*50)
-print(f"Time taken for auction: {toc - tic:.4f} seconds")
+print(f"Time taken for auction  : {toc - tic:.4f} seconds")
 
 # Check duality
 primal_value_t = (Φ_t_i_j * mu_t_i_j).sum((1,2))
 dual_value_t = u_t_i.sum(1) + v_t_j.sum(1)
-print("Duality Gap: ", (dual_value_t - primal_value_t))
-
-######################################
-market = get_template("TU")(Φ_t_i_j[0])
-# u_i, v_j, mu_i_j = market.forward_reverse_scaling(eps_init, eps, scaling_factor)
-u_i = u_t_i[0]
-v_j = v_t_j[0]
-mu_i_j = mu_t_i_j[0]
-Φ_i_j = Φ_t_i_j[0]
-
-market.check_equilibrium(u_i, v_j, mu_i_j, eps)
-
-# primal_value_t = (Φ_t_i_j[0] * mu_i_j).sum()
-# dual_value_t = u_i.sum() + v_j.sum()
-# print("Duality Gap: ", (dual_value_t - primal_value_t))
-
-print('-'*50)
-print(torch.all(u_i[:, None] + v_j[None, :] >= Φ_i_j))
-print('-'*50)
-print(((Φ_i_j - u_i[:, None] - v_j[None, :]) * mu_i_j).sum()) 
+print(f"Max duality gap across t: {(dual_value_t - primal_value_t).amax()}")
 
 

@@ -17,7 +17,7 @@ for iter in range(200):
     # market.sampling_rate = 0.1
 
     # Solve equilibrium
-    eps = 1e-3
+    eps = 1e-4
     scaling_factor = 0.5
     eps_init = 50
     tic = time.time()

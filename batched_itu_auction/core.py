@@ -211,56 +211,55 @@ class ITUauction:
         return u_t_i, v_t_j, mu_t_i, mu_t_j
 
     # Scaling method
-    # def forward_reverse_scaling(self, eps_init, eps_target, scaling_factor):
-    #     eps = eps_init
-    #     v_t_j = self.init_v_t_j.clone()
-
-    #     while True:
-    #         print(f"eps: {eps}")
-    #         u_t_i, v_t_j, _, _ = self.forward_auction(init_v_t_j = v_t_j,  eps= eps)
-    #         eps *=  scaling_factor
-    #         u_t_i, v_t_j, _, _  = self.reverse_auction(init_u_t_i = u_t_i, eps= eps)
-    #         if eps <= eps_target:
-    #             break
-
-    #     u_t_i, v_t_j, mu_t_i, mu_t_j  = self.reverse_auction(init_u_t_i = u_t_i, eps= eps)
-    #     mu_t_j[mu_t_j == self.num_i] = -1
-    #     violations_t_i = (u_t_i > self.u_0) & (mu_t_i == -1)
-    #     mu_t_i[violations_t_i] = -1
-    #     u_t_i, v_t_j, mu_t_i_j = self.forward_auction(init_v_t_j = v_t_j, init_mu_t_i= mu_t_i, init_mu_t_j = mu_t_j, eps= eps, return_mu_t_i_j= True)
-
-    #     return u_t_i, v_t_j, mu_t_i_j
-
-
-
     def forward_reverse_scaling(self, eps_init, eps_target, scaling_factor):
         eps = eps_init
         v_t_j = self.init_v_t_j.clone()
-        mu_t_i = self.init_mu_t_i.clone()
-        mu_t_j = self.init_mu_t_j.clone()
 
         while True:
-            u_t_i, v_t_j, mu_t_i, mu_t_j = self.forward_auction(init_v_t_j = v_t_j, init_mu_t_i= mu_t_i, init_mu_t_j = mu_t_j, eps= eps)
-            u_t_i, v_t_j, mu_t_i, mu_t_j = self.drop_for_scaling("j", u_t_i, v_t_j, mu_t_i, mu_t_j)
+            print(f"eps: {eps}")
+            u_t_i, v_t_j, mu_t_i, mu_t_j = self.forward_auction(init_v_t_j = v_t_j,  eps= eps)
             eps *=  scaling_factor
-            u_t_i, v_t_j, mu_t_i, mu_t_j = self.reverse_auction(init_u_t_i = u_t_i, init_mu_t_i= mu_t_i, init_mu_t_j = mu_t_j, eps= eps)
-            u_t_i, v_t_j, mu_t_i, mu_t_j = self.drop_for_scaling("i", u_t_i, v_t_j, mu_t_i, mu_t_j)
+            u_t_i, v_t_j, mu_t_i, mu_t_j  = self.reverse_auction(init_u_t_i = u_t_i, eps= eps)
             if eps <= eps_target:
                 break
 
+        mu_t_j[mu_t_j == self.num_i] = -1
+        violations_IR_t_i = (u_t_i > self.u_0) & (mu_t_i == -1)
+        mu_t_i[violations_IR_t_i] = -1
         u_t_i, v_t_j, mu_t_i_j = self.forward_auction(init_v_t_j = v_t_j, init_mu_t_i= mu_t_i, init_mu_t_j = mu_t_j, eps= eps, return_mu_t_i_j= True)
-
         return u_t_i, v_t_j, mu_t_i_j
 
 
-    def drop_for_scaling(self, side, u_t_i, v_t_j, mu_t_i, mu_t_j):
-        if side == "i":
-            mu_t_j[mu_t_j == self.num_i] = -1
-            violations_t_i = (u_t_i > self.u_0) & (mu_t_i == -1)
-            mu_t_i[violations_t_i] = -1
-        elif side == "j":
-            mu_t_i[mu_t_i == self.num_j] = -1
-            violations_t_j = (v_t_j > self.v_0) & (mu_t_j == -1)
-            mu_t_j[violations_t_j] = -1
 
-        return u_t_i, v_t_j, mu_t_i, mu_t_j
+    # def forward_reverse_scaling(self, eps_init, eps_target, scaling_factor):
+    #     eps = eps_init
+    #     v_t_j = self.init_v_t_j.clone()
+    #     mu_t_i = self.init_mu_t_i.clone()
+    #     mu_t_j = self.init_mu_t_j.clone()
+
+    #     while True:
+    #         print(f"eps: {eps}")
+    #         u_t_i, v_t_j, mu_t_i, mu_t_j = self.forward_auction(init_v_t_j = v_t_j, init_mu_t_i= mu_t_i, init_mu_t_j = mu_t_j, eps= eps)
+    #         u_t_i, v_t_j, mu_t_i, mu_t_j = self.drop_for_scaling("j", u_t_i, v_t_j, mu_t_i, mu_t_j, eps)
+    #         eps *=  scaling_factor
+    #         u_t_i, v_t_j, mu_t_i, mu_t_j = self.reverse_auction(init_u_t_i = u_t_i, init_mu_t_i= mu_t_i, init_mu_t_j = mu_t_j, eps= eps)
+    #         u_t_i, v_t_j, mu_t_i, mu_t_j = self.drop_for_scaling("i", u_t_i, v_t_j, mu_t_i, mu_t_j, eps)
+    #         if eps <= eps_target:
+    #             break
+
+    #     u_t_i, v_t_j, mu_t_i_j = self.forward_auction(init_v_t_j = v_t_j, eps= eps, return_mu_t_i_j= True)
+    #     return u_t_i, v_t_j, mu_t_i_j
+
+    # def drop_for_scaling(self, side, u_t_i, v_t_j, mu_t_i, mu_t_j, eps):
+    #     if side == "i":
+    #         mu_t_j[mu_t_j == self.num_i] = -1
+    #         violations_IR_t_i = (u_t_i > self.u_0) & (mu_t_i == -1)
+    #         mu_t_i[violations_IR_t_i] = -1
+
+            
+    #     elif side == "j":
+    #         mu_t_i[mu_t_i == self.num_j] = -1
+    #         violations_IR_t_j = (v_t_j > self.v_0) & (mu_t_j == -1)
+    #         mu_t_j[violations_IR_t_j] = -1
+
+    #     return u_t_i, v_t_j, mu_t_i, mu_t_j
