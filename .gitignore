@@ -39,3 +39,4 @@ build/
 *.sbatch
 *.out
 pytorch_scatter/
+deprecated/

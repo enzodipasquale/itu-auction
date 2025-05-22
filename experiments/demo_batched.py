@@ -3,10 +3,9 @@ from batched_itu_auction import ITUauction
 from itu_auction import get_template
 import time
 
-num_i = 1000
-num_j = 980
+num_i = 500
+num_j = 550
 num_t = 100
-
 
 
 torch.manual_seed(234524354)
@@ -34,14 +33,13 @@ scaling_factor = .5
 tic = time.time()
 # u_t_i, v_t_j, mu_t_i_j = market.forward_auction(eps = eps, return_mu_t_i_j = True)
 # u_t_i, v_t_j, mu_t_i_j = market.reverse_auction(eps = eps, return_mu_t_i_j = True)
-u_t_i, v_t_j, mu_t_i_j = market.forward_reverse_scaling(eps_init = eps_init, eps_target = eps, scaling_factor = scaling_factor)
-
+u_t_i, v_t_j, mu_t_i_j = market.forward_reverse_scaling(eps_init = eps_init, eps_target = eps, 
+                                                        scaling_factor = scaling_factor)
 market.check_equilibrium(u_t_i, v_t_j, mu_t_i_j, eps = eps)
 
 toc = time.time()
 print('-'*50)
 print(f"Time taken for auction  : {toc - tic:.4f} seconds")
-
 # Check duality
 primal_value_t = (Φ_t_i_j * mu_t_i_j).sum((1,2))
 dual_value_t = u_t_i.sum(1) + v_t_j.sum(1)

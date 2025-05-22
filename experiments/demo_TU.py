@@ -2,8 +2,8 @@ import torch
 from itu_auction import get_template
 import time
 
-num_i = 1000
-num_j = 980
+num_i = 100
+num_j = 98
 
 for iter in range(200):
     print(iter)
