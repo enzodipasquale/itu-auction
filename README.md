@@ -23,3 +23,13 @@ This package provides a flexible framework to solve auction-based optimization p
 - **PyTorch-based:** Fully utilizes GPU or CPU parallelism for speed and scalability.
 
 ---
+
+## Installation
+
+First, make sure you have [PyTorch](https://pytorch.org/) installed, as it is required by this package. You can install PyTorch following the instructions on their website tailored to your system and CUDA version.
+
+Once PyTorch is installed, install the remaining dependencies and the package itself with:
+
+```bash
+pip install -r requirements.txt
+pip install -e .
