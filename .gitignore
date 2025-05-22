@@ -40,3 +40,4 @@ build/
 *.out
 pytorch_scatter/
 deprecated/
+test.py
