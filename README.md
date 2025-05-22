@@ -1,6 +1,6 @@
 # ITU Auction Algorithms
 
-An implementation of auction algorithms inspired by Bertsekas for solving assignment problems with non-separable valuations. This library leverages **PyTorch** for efficient parallel computation and supports batched problem solving.
+An implementation of auction algorithms inspired by Bertsekas for solving assignment problems with non-separable valuations, i.e. with imperfectly transferable utility (ITU). This library leverages **PyTorch** for efficient parallel computation and supports batched problem solving.
 
 ---
 
