@@ -8,8 +8,11 @@ num_j = 550
 num_t = 100
 
 
-torch.manual_seed(234524354)
+torch.manual_seed(24)
+# device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
+
 Φ_t_i_j = torch.stack([(torch.randint(0, 3, (num_i, 1), device=device) * torch.randint(0, 3, (1, num_j), device=device)) 
                         for _ in range(num_t)], dim=0)
 

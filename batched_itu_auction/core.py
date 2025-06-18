@@ -4,6 +4,7 @@ import sys
 class ITUauction:
     def __init__(self, num_i, num_j, num_t, get_U_t_i_j, get_V_t_i_j, lb = (0, 0)):
 
+        # self.device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.num_i = num_i
