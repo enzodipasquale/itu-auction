@@ -8,6 +8,8 @@ An implementation of auction algorithms inspired by Bertsekas for solving assign
 
 The package solves auction-based optimization problems where valuations may be non-separable across agents and items. Users supply their own valuation functions and the algorithm finds approximate equilibrium allocations using forward and reverse auction methods with epsilon-scaling.
 
+These are the ITU matching problems studied in Bonnet, Galichon, Hsieh, O'Hara, and Shum, [*Yogurts Choose Consumers? Estimation of Random-Utility Models via Two-Sided Matching*](https://arxiv.org/abs/2111.13744) (forthcoming, *Review of Economic Studies*).
+
 ---
 
 ## Features
