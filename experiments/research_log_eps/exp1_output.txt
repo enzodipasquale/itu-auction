@@ -1,0 +1,46 @@
+# Iteration count vs eps_target  (N=50)
+
+case              eps_target  total_iter  fwd_phases  rev_phases   time(s)
+TU                   1.0e-01       145.3          10          10     0.014
+TU                   1.0e-02       241.3          14          14     0.016
+TU                   1.0e-03       267.3          17          17     0.018
+TU                   1.0e-04       298.3          20          20     0.020
+TU                   1.0e-05       344.3          24          24     0.022
+TU                   1.0e-06       378.3          27          27     0.024
+
+LU(kappa=2)          1.0e-01       172.7          10          10     0.012
+LU(kappa=2)          1.0e-02       264.3          14          14     0.018
+LU(kappa=2)          1.0e-03       298.0          17          17     0.021
+LU(kappa=2)          1.0e-04       339.0          20          20     0.024
+LU(kappa=2)          1.0e-05       387.0          24          24     0.026
+LU(kappa=2)          1.0e-06       423.0          27          27     0.029
+
+LU(kappa=5)          1.0e-01       179.3          10          10     0.012
+LU(kappa=5)          1.0e-02       230.0          14          14     0.016
+LU(kappa=5)          1.0e-03       259.3          17          17     0.018
+LU(kappa=5)          1.0e-04       288.0          20          20     0.020
+LU(kappa=5)          1.0e-05       327.3          24          24     0.023
+LU(kappa=5)          1.0e-06       354.0          27          27     0.025
+
+LU(kappa=20)         1.0e-01       129.7          10          10     0.009
+LU(kappa=20)         1.0e-02       184.0          14          14     0.013
+LU(kappa=20)         1.0e-03       213.7          17          17     0.016
+LU(kappa=20)         1.0e-04       241.3          20          20     0.018
+LU(kappa=20)         1.0e-05       274.3          24          24     0.020
+LU(kappa=20)         1.0e-06       291.7          27          27     0.021
+
+LU(kappa=100)        1.0e-01       114.7          10          10     0.008
+LU(kappa=100)        1.0e-02       164.0          14          14     0.012
+LU(kappa=100)        1.0e-03       178.0          17          17     0.013
+LU(kappa=100)        1.0e-04       199.7          20          20     0.014
+LU(kappa=100)        1.0e-05       228.7          24          24     0.017
+LU(kappa=100)        1.0e-06       250.0          27          27     0.018
+
+
+# Scaling analysis: y = total_iter, x = 1/eps_target
+case               slope(loglog)   R^2(log(1/eps))   R^2(1/eps)              verdict
+TU                        -0.074             0.954        0.411      log(1/eps) wins
+LU(kappa=2)               -0.071             0.972        0.416      log(1/eps) wins
+LU(kappa=5)               -0.057             0.991        0.453      log(1/eps) wins
+LU(kappa=20)              -0.067             0.975        0.384      log(1/eps) wins
+LU(kappa=100)             -0.062             0.974        0.448      log(1/eps) wins

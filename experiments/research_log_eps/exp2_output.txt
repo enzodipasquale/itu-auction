@@ -1,0 +1,20 @@
+=== Experiment 2: adversarial / hard cases ===
+
+## Larger kappa (eps-scaling)
+case                      N      1e-02      1e-03      1e-04      1e-05      1e-06
+LU(kappa=  1000)           50      176.0      177.0      208.0      243.0      269.7
+LU(kappa= 10000)           50       67.0      155.0      180.7      208.7      225.3
+LU(kappa=  1000)          100      317.0      330.7      347.0      367.0      380.0
+LU(kappa= 10000)          100      120.3      347.7      372.3      397.7      415.7
+LU(kappa=  1000)          200      424.0      472.3      512.3      553.7      576.3
+LU(kappa= 10000)          200      266.7      507.7      538.3      582.7      615.3
+
+## Fixed-eps (no scaling) on TU and LU(kappa=10)
+case                  1e-02      1e-03      1e-04      1e-05      1e-06
+TU                    164.0      249.7      291.3      301.3      292.0
+LU(kappa=10)           89.7      100.0      106.3      112.3      112.3
+
+## Price-war: all consumers tied on a few yogurts
+price-war kappa=   1          159        198        232        264        289
+price-war kappa=  10          187        223        233        249        260
+price-war kappa= 100          156        176        194        214        230
