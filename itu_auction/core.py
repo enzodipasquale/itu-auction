@@ -617,12 +617,12 @@ class ITUauction:
         while True:
             u_i, v_j, mu_i  = self.forward_auction(init_v_j = v_j,  eps= eps)
             next_eps = eps * scaling_factor
-            if next_eps < eps_target:
+            if next_eps <= eps_target:
                 break
             u_i, v_j, mu_j  = self.reverse_auction(init_u_i = u_i, eps= next_eps)
             mu_i = self._mu_j_to_mu_i(mu_j)
             eps = next_eps * scaling_factor
-            if eps < eps_target:
+            if eps <= eps_target:
                 break
 
         terminal_eps = eps_target
@@ -654,7 +654,6 @@ class ITUauction:
         )
 
         return u_i, v_j, mu_i_j
-
 
 
 
