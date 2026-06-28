@@ -30,6 +30,12 @@ class CountingAuction(_ITUauction):
         self.fwd_iters_per_phase.append(self._cur_fwd)
         return out
 
+    def matching_preserve_forward_auction(self, *args, **kwargs):
+        self._cur_fwd = 0
+        out = super().matching_preserve_forward_auction(*args, **kwargs)
+        self.fwd_iters_per_phase.append(self._cur_fwd)
+        return out
+
     def reverse_auction(self, *args, **kwargs):
         self._cur_rev = 0
         out = super().reverse_auction(*args, **kwargs)

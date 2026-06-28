@@ -67,28 +67,90 @@ def silent_cs_violation(market, u_i, v_j):
         return float((market.get_U_i_j(v_j, market.all_i).amax(dim=1) - u_i).amax().item())
 
 
-def run_market(market, eps_target, eps_init, theta):
+def max_or_zero(values):
+    return float(values.max().item()) if values.numel() else 0.0
+
+
+def silent_diagnostics(market, u_i, v_j, mu_i_j, eps, certificate_tol):
+    matched_i = mu_i_j.sum(dim=1) > 0
+    matched_j = mu_i_j.sum(dim=0) > 0
+    matched_pair_i, matched_pair_j = mu_i_j.nonzero(as_tuple=True)
+    if matched_pair_i.numel():
+        matched_u = market.get_U_i_j(v_j[matched_pair_j], matched_pair_i, matched_pair_j)
+        matched_pair_error = max_or_zero(torch.abs(u_i[matched_pair_i] - matched_u))
+    else:
+        matched_pair_error = 0.0
+    outside_i_error = max_or_zero(torch.abs(u_i[~matched_i] - market.u_0))
+    outside_j_error = max_or_zero(torch.abs(v_j[~matched_j] - market.v_0))
+    cs_violation = silent_cs_violation(market, u_i, v_j)
+    feasible = bool(torch.all(mu_i_j.sum(dim=1) <= 1) and torch.all(mu_i_j.sum(dim=0) <= 1))
+    object_terminal_certificate = market.terminal_completion_certificate(
+        v_j, mu_i_j, eps=eps, outside_tol=certificate_tol
+    )
+    diagnostic_tol = max(certificate_tol, 1e-5)
+    return {
+        "cs_violation": cs_violation,
+        "feasible": feasible,
+        "outside_i_exact_error": outside_i_error,
+        "outside_j_exact_error": outside_j_error,
+        "outside_i_upper_ok": bool(torch.all(u_i[~matched_i] <= market.u_0 + eps)),
+        "outside_j_upper_ok": bool(torch.all(v_j[~matched_j] <= market.v_0 + eps)),
+        "matched_pair_error": matched_pair_error,
+        "object_terminal_certificate_passed_final": object_terminal_certificate,
+        "terminal_certificate_passed_final": object_terminal_certificate,
+        "full_equilibrium_diagnostic_passed": bool(
+            feasible
+            and cs_violation <= eps + diagnostic_tol
+            and matched_pair_error <= diagnostic_tol
+            and outside_i_error <= diagnostic_tol
+            and object_terminal_certificate
+        ),
+    }
+
+
+def run_market(market, eps_target, eps_init, theta, certify_terminal, certificate_tol):
     market._reset_counters()
     start = time.perf_counter()
-    u_i, v_j, mu_i_j = market.forward_reverse_scaling(eps_init, eps_target, theta)
+    u_i, v_j, mu_i_j = market.forward_reverse_scaling(
+        eps_init,
+        eps_target,
+        theta,
+        certify_terminal=certify_terminal,
+        certificate_tol=certificate_tol,
+    )
     elapsed = time.perf_counter() - start
+    diagnostics = silent_diagnostics(market, u_i, v_j, mu_i_j, eps_target, certificate_tol)
+    warm_object_certificate = bool(getattr(market, "last_terminal_certificate_passed", False))
     return {
+        "certify_terminal": certify_terminal,
+        "certificate_tol": certificate_tol,
+        "effective_terminal_eps": getattr(market, "last_terminal_eps", eps_target),
         "total_iters": market.total_iters,
         "fwd_phases": len(market.fwd_iters_per_phase),
         "rev_phases": len(market.rev_iters_per_phase),
         "runtime_sec": elapsed,
-        "cs_violation": silent_cs_violation(market, u_i, v_j),
         "matched_pairs": int(mu_i_j.sum().item()),
+        "object_terminal_certificate_passed_warm": warm_object_certificate,
+        "terminal_certificate_passed_warm": warm_object_certificate,
+        "terminal_fallback_used": bool(getattr(market, "last_terminal_fallback_used", False)),
+        **diagnostics,
     }
 
 
-def run_case(case, eps_grid, seeds, eps_init, theta):
+def run_case(case, eps_grid, seeds, eps_init, theta, certify_terminal, certificate_tol):
     rows = []
     for eps_target in eps_grid:
         for seed in seeds:
             print(f"  {case['name']} eps={eps_target:.0e} seed={seed}", flush=True)
             market, actual_kappa = case["maker"](seed)
-            result = run_market(market, eps_target, eps_init, theta)
+            result = run_market(
+                market,
+                eps_target,
+                eps_init,
+                theta,
+                certify_terminal=certify_terminal,
+                certificate_tol=certificate_tol,
+            )
             rows.append(
                 {
                     "experiment": case["experiment"],
@@ -125,6 +187,11 @@ def aggregate_rows(rows):
         time_mean, time_sd = summarize([g["runtime_sec"] for g in group])
         kappa_mean, kappa_sd = summarize([g["actual_kappa"] for g in group])
         cs_max = max(g["cs_violation"] for g in group)
+        fallback_count = sum(g["terminal_fallback_used"] for g in group)
+        warm_certificate_count = sum(g["object_terminal_certificate_passed_warm"] for g in group)
+        final_certificate_count = sum(g["object_terminal_certificate_passed_final"] for g in group)
+        full_equilibrium_count = sum(g["full_equilibrium_diagnostic_passed"] for g in group)
+        feasible_count = sum(g["feasible"] for g in group)
         out.append(
             {
                 "experiment": experiment,
@@ -143,6 +210,16 @@ def aggregate_rows(rows):
                 "fwd_phases": group[0]["fwd_phases"],
                 "rev_phases": group[0]["rev_phases"],
                 "cs_violation_max": cs_max,
+                "warm_certificate_rate": warm_certificate_count / len(group),
+                "fallback_count": fallback_count,
+                "fallback_rate": fallback_count / len(group),
+                "object_terminal_certificate_rate": final_certificate_count / len(group),
+                "final_certificate_rate": final_certificate_count / len(group),
+                "full_equilibrium_diagnostic_rate": full_equilibrium_count / len(group),
+                "feasible_rate": feasible_count / len(group),
+                "matched_pair_error_max": max(g["matched_pair_error"] for g in group),
+                "outside_i_exact_error_max": max(g["outside_i_exact_error"] for g in group),
+                "outside_j_exact_error_max": max(g["outside_j_exact_error"] for g in group),
             }
         )
     return out
@@ -181,6 +258,22 @@ def compact_table_rows(agg_rows):
                 "iterations_at_eps_low": row_min["iterations_mean"],
                 "runtime_at_eps_low": row_min["runtime_sec_mean"],
                 "seeds": row_min["seeds"],
+                "fallback_rate_at_eps_high": row_max["fallback_rate"],
+                "fallback_rate_at_eps_low": row_min["fallback_rate"],
+                "object_terminal_certificate_rate_at_eps_high": row_max[
+                    "object_terminal_certificate_rate"
+                ],
+                "object_terminal_certificate_rate_at_eps_low": row_min[
+                    "object_terminal_certificate_rate"
+                ],
+                "final_certificate_rate_at_eps_high": row_max["final_certificate_rate"],
+                "final_certificate_rate_at_eps_low": row_min["final_certificate_rate"],
+                "full_equilibrium_diagnostic_rate_at_eps_high": row_max[
+                    "full_equilibrium_diagnostic_rate"
+                ],
+                "full_equilibrium_diagnostic_rate_at_eps_low": row_min[
+                    "full_equilibrium_diagnostic_rate"
+                ],
             }
         )
     return compact
@@ -209,24 +302,30 @@ def write_markdown(path, agg_rows, compact_rows, metadata):
     lines.append("")
     lines.append("## Compact Table Rows")
     lines.append("")
-    lines.append("| Experiment | Case | N | Target kappa | eps high iter/time | eps low iter/time | Seeds |")
-    lines.append("| --- | --- | ---: | ---: | ---: | ---: | ---: |")
+    lines.append("| Experiment | Case | N | Target kappa | eps high iter/time | eps low iter/time | Fallback high/low | Object cert high/low | Eq diag high/low | Seeds |")
+    lines.append("| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
     for row in compact_rows:
         lines.append(
             "| {experiment} | {case} | {N} | {target_kappa} | "
             "{iterations_at_eps_high:.1f} / {runtime_at_eps_high:.4f}s | "
-            "{iterations_at_eps_low:.1f} / {runtime_at_eps_low:.4f}s | {seeds} |".format(**row)
+            "{iterations_at_eps_low:.1f} / {runtime_at_eps_low:.4f}s | "
+            "{fallback_rate_at_eps_high:.2f} / {fallback_rate_at_eps_low:.2f} | "
+            "{object_terminal_certificate_rate_at_eps_high:.2f} / {object_terminal_certificate_rate_at_eps_low:.2f} | "
+            "{full_equilibrium_diagnostic_rate_at_eps_high:.2f} / {full_equilibrium_diagnostic_rate_at_eps_low:.2f} | "
+            "{seeds} |".format(**row)
         )
     lines.append("")
     lines.append("## Full Aggregates")
     lines.append("")
-    lines.append("| Experiment | Case | eps | Iter mean | Iter sd | Runtime mean | Runtime sd | CS max |")
-    lines.append("| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |")
+    lines.append("| Experiment | Case | eps | Iter mean | Iter sd | Runtime mean | Runtime sd | CS max | Fallback rate | Object cert rate | Eq diag rate |")
+    lines.append("| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
     for row in agg_rows:
         lines.append(
             "| {experiment} | {case} | {eps_target:.0e} | "
             "{iterations_mean:.1f} | {iterations_sd:.1f} | "
-            "{runtime_sec_mean:.4f} | {runtime_sec_sd:.4f} | {cs_violation_max:.2e} |".format(**row)
+            "{runtime_sec_mean:.4f} | {runtime_sec_sd:.4f} | {cs_violation_max:.2e} | "
+            "{fallback_rate:.2f} | {object_terminal_certificate_rate:.2f} | "
+            "{full_equilibrium_diagnostic_rate:.2f} |".format(**row)
         )
     path.write_text("\n".join(lines) + "\n")
 
@@ -288,6 +387,17 @@ def main():
     parser.add_argument("--out-dir", default="experiments/research_log_eps/final_outputs")
     parser.add_argument("--tag", default=None)
     parser.add_argument("--smoke", action="store_true", help="Run two seeds and shortened grids.")
+    parser.add_argument(
+        "--certify-terminal",
+        action="store_true",
+        help="Run the exact object-side terminal certificate and cold-start fallback if needed.",
+    )
+    parser.add_argument(
+        "--certificate-tol",
+        type=float,
+        default=0.0,
+        help="Absolute tolerance for unmatched item payoffs in the terminal certificate.",
+    )
     args = parser.parse_args()
 
     seeds = list(range(args.seed_start, args.seed_start + args.seeds))
@@ -309,7 +419,17 @@ def main():
             f"Running {case['name']} over {len(eps_grid)} eps values and {len(seeds)} seeds",
             flush=True,
         )
-        all_rows.extend(run_case(case, eps_grid, seeds, args.eps_init, args.theta))
+        all_rows.extend(
+            run_case(
+                case,
+                eps_grid,
+                seeds,
+                args.eps_init,
+                args.theta,
+                certify_terminal=args.certify_terminal,
+                certificate_tol=args.certificate_tol,
+            )
+        )
 
     agg_rows = aggregate_rows(all_rows)
     compact_rows = compact_table_rows(agg_rows)
@@ -320,6 +440,8 @@ def main():
         "seeds": f"{seeds[0]}..{seeds[-1]} ({len(seeds)} seeds)",
         "eps_init": args.eps_init,
         "theta": args.theta,
+        "certify_terminal": args.certify_terminal,
+        "certificate_tol": args.certificate_tol,
         "python": platform.python_version(),
         "platform": platform.platform(),
         "processor": platform.processor() or "unknown",

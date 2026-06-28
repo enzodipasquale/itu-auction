@@ -163,6 +163,46 @@ class ITUauction:
 
         return bool(lower_ok and outside_ok)
 
+    def _mu_i_to_mu_i_j(self, mu_i):
+        return mu_i.unsqueeze(1) == self.all_j.unsqueeze(0)
+
+    def _mu_j_to_mu_i_j(self, mu_j):
+        return mu_j.unsqueeze(0) == self.all_i.unsqueeze(1)
+
+    def _mu_j_to_mu_i(self, mu_j):
+        mu_i = self.init_mu_i.clone()
+        real_j = (mu_j >= 0) & (mu_j < self.num_i)
+        if torch.any(real_j):
+            mu_i[mu_j[real_j]] = self.all_j[real_j]
+        return mu_i
+
+    def _consumer_payoffs_from_matching(self, v_j, mu_i):
+        u_i = self.init_u_i.clone()
+        real_i = (mu_i >= 0) & (mu_i < self.num_j)
+        if torch.any(real_i):
+            i_id = self.all_i[real_i]
+            j_id = mu_i[real_i]
+            u_i[real_i] = self.get_U_i_j(v_j[j_id], i_id, j_id)
+        return u_i
+
+    def _item_payoffs_from_matching(self, u_i, mu_j):
+        v_j = self.init_v_j.clone()
+        real_j = (mu_j >= 0) & (mu_j < self.num_i)
+        if torch.any(real_j):
+            j_id = self.all_j[real_j]
+            i_id = mu_j[real_j]
+            v_j[real_j] = self.get_V_i_j(u_i[i_id], j_id, i_id)
+        return v_j
+
+    def _forward_eligible_i(self, v_j, mu_i, eps):
+        unmatched_i = mu_i == -1
+        current_u = self._consumer_payoffs_from_matching(v_j, mu_i)
+        best_real_u = self.get_U_i_j(v_j, self.all_i).amax(dim=1)
+        outside_u = torch.full_like(best_real_u, self.u_0)
+        best_u = torch.maximum(best_real_u, outside_u)
+        violated_i = best_u > current_u + eps
+        return (unmatched_i | violated_i).nonzero(as_tuple=True)[0]
+
 
     # Forward auction
     def _forward_bid(self, i_id, v_j, eps):
@@ -315,12 +355,49 @@ class ITUauction:
 
             unmatched_i, v_j, mu_i = self._forward_iteration(unmatched_i, v_j, mu_i, eps)
 
-        # Compute utility for each bidder and binary assignment matrix
-        u_i = self.get_U_i_j(v_j, self.all_i).amax(dim=1).clamp(min=self.u_0)
+        # Return theorem payoffs: equality on real matches and u_0 outside.
+        u_i = self._consumer_payoffs_from_matching(v_j, mu_i)
         if return_mu_i_j:
-            mu_i_j = mu_i.unsqueeze(1) == self.all_j.unsqueeze(0)
+            mu_i_j = self._mu_i_to_mu_i_j(mu_i)
             return u_i, v_j, mu_i_j
 
+        return u_i, v_j, mu_i
+
+    def matching_preserve_forward_auction(
+        self,
+        init_v_j=None,
+        init_mu_i=None,
+        eps=0,
+        return_mu_i_j=False,
+    ):
+        """
+        Run the matching-preserve forward phase from an inherited matching.
+
+        Consumers that are unmatched or epsilon-violated are released and bid;
+        inherited matches that are not epsilon-violated remain fixed unless
+        displaced by another bid. This is the terminal phase used by the theory
+        draft before checking the object-side outside-completion certificate.
+        """
+        v_j = self.init_v_j.clone() if init_v_j is None else init_v_j
+        mu_i = self.init_mu_i.clone() if init_mu_i is None else init_mu_i
+        eligible_i = self._forward_eligible_i(v_j, mu_i, eps)
+
+        while eligible_i.numel() > 0:
+            if self.method == "GS":
+                selected_i = eligible_i[:1]
+            elif self.method == "batched":
+                batch_size = max(1, int(self.sampling_rate * eligible_i.size(0)))
+                selected_i = eligible_i[torch.randperm(eligible_i.size(0))[:batch_size]]
+            else:
+                selected_i = eligible_i
+
+            mu_i[selected_i] = -1
+            _, v_j, mu_i = self._forward_iteration(selected_i, v_j, mu_i, eps)
+            eligible_i = self._forward_eligible_i(v_j, mu_i, eps)
+
+        u_i = self._consumer_payoffs_from_matching(v_j, mu_i)
+        if return_mu_i_j:
+            return u_i, v_j, self._mu_i_to_mu_i_j(mu_i)
         return u_i, v_j, mu_i
 
 
@@ -359,9 +436,9 @@ class ITUauction:
         # w_j = top2.values[1, bidding]
         w_j = torch.clamp(top2.values[1, bidding], min=self.v_0)
 
-        # Compute bids
-        # bid_j = self.get_U_i_j(w_j - eps, i_j, bidder_id)
-        bid_j = self.get_U_i_j(w_j, i_j, bidder_id) + eps
+        # Compute bids. The winning item gives the selected bidder utility
+        # U_ij(w_j - eps), so its own payoff is w_j - eps on that frontier.
+        bid_j = self.get_U_i_j(w_j - eps, i_j, bidder_id)
 
         return out_id, bidder_id, i_j, bid_j
 
@@ -468,10 +545,11 @@ class ITUauction:
 
             unmatched_j, u_i, mu_j = self._reverse_iteration(unmatched_j, u_i, mu_j, eps)
 
-        v_j = self.get_V_i_j(u_i, j_id = self.all_j).amax(dim=0).clamp(min=self.v_0)
+        # Return theorem payoffs: equality on real matches and v_0 outside.
+        v_j = self._item_payoffs_from_matching(u_i, mu_j)
 
         if return_mu_i_j:
-            mu_i_j = mu_j.unsqueeze(0) == self.all_i.unsqueeze(1)
+            mu_i_j = self._mu_j_to_mu_i_j(mu_j)
             return u_i, v_j, mu_i_j
 
         return u_i, v_j, mu_j
@@ -534,33 +612,48 @@ class ITUauction:
         """
         eps = eps_init
         v_j = self.init_v_j.clone()
+        mu_i = self.init_mu_i.clone()
 
         while True:
             u_i, v_j, mu_i  = self.forward_auction(init_v_j = v_j,  eps= eps)
-            eps *=  scaling_factor
-            u_i, v_j, mu_j  = self.reverse_auction(init_u_i = u_i, eps= eps)
-            if eps <= eps_target:
+            next_eps = eps * scaling_factor
+            if next_eps < eps_target:
+                break
+            u_i, v_j, mu_j  = self.reverse_auction(init_u_i = u_i, eps= next_eps)
+            mu_i = self._mu_j_to_mu_i(mu_j)
+            eps = next_eps * scaling_factor
+            if eps < eps_target:
                 break
 
-        u_i, v_j, mu_i_j  = self.reverse_auction(init_u_i = u_i, eps= eps, return_mu_i_j= True)
-        mu_i = torch.where(mu_i_j.any(dim=1), mu_i_j.int().argmax(dim=1), -1)
-        violations_i = (u_i > self.u_0) & (mu_i_j.sum(dim=1) == 0)
-        mu_i[violations_i] = -1
+        terminal_eps = eps_target
 
-        u_i, v_j, mu_i_j  = self.forward_auction(init_v_j = v_j, init_mu_i= mu_i, eps= eps, return_mu_i_j= True)
+        u_i, v_j, mu_i_j  = self.matching_preserve_forward_auction(
+            init_v_j = v_j,
+            init_mu_i= mu_i,
+            eps= terminal_eps,
+            return_mu_i_j= True,
+        )
 
-        if certify_terminal and not self.terminal_completion_certificate(
-            v_j, mu_i_j, eps=eps, outside_tol=certificate_tol
-        ):
+        terminal_certificate_passed = self.terminal_completion_certificate(
+            v_j, mu_i_j, eps=terminal_eps, outside_tol=certificate_tol
+        )
+        self.last_terminal_eps = terminal_eps
+        self.last_terminal_certificate_passed = terminal_certificate_passed
+        self.last_terminal_fallback_used = False
+
+        if certify_terminal and not terminal_certificate_passed:
+            self.last_terminal_fallback_used = True
             u_i, v_j, mu_i_j = self.forward_auction(
                 init_v_j=self.init_v_j.clone(),
-                eps=eps,
+                eps=terminal_eps,
                 return_mu_i_j=True,
             )
 
+        self.last_terminal_final_certificate_passed = self.terminal_completion_certificate(
+            v_j, mu_i_j, eps=terminal_eps, outside_tol=certificate_tol
+        )
+
         return u_i, v_j, mu_i_j
-
-
 
 
 
