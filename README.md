@@ -181,9 +181,15 @@ Returns a pre-built auction class. Available names: `"TU"`, `"LU"`, `"convex_tax
 
 Solves the auction with epsilon-scaling. Returns `(u_i, v_j, mu_i_j)`: bidder utilities, item prices, and the binary assignment matrix.
 
+By default this keeps the historical warm terminal cleanup used by the experiment scripts. To force the exact outside-completion certificate used in the theory draft, pass `certify_terminal=True`; if the warm cleanup fails the certificate, the solver runs a cold final forward auction at the final epsilon.
+
+### `terminal_completion_certificate(v_j, mu_i_j, eps)`
+
+Checks whether unmatched real items can be exactly completed with the outside option: unmatched item payoffs must equal `v_0` and all item payoffs must satisfy the lower bound `v_j >= v_0 - eps`.
+
 ### `check_equilibrium(u_i, v_j, mu_i_j, eps)`
 
-Returns `(CS, feas, IR_i, IR_j)`: complementary slackness gap, feasibility flag, and individual rationality flags for bidders and items.
+Returns `(CS, feas, IR_i, IR_j)`: complementary slackness gap, feasibility flag, and implementation-level outside-slack flags for unmatched bidders and items. This diagnostic is weaker than the exact terminal completion certificate.
 
 ---
 

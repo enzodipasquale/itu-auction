@@ -82,13 +82,18 @@ class ITUauction:
 
     def check_equilibrium(self, u_i, v_j, mu_i_j, eps = 0):
         """
-        Check if the current allocation satisfies market equilibrium conditions.
+        Check the implementation-level approximate equilibrium diagnostics.
         
         This method verifies four key equilibrium conditions:
         1. Complementary Slackness: Agents are assigned to their most preferred items
-        2. Feasibility: Each agent gets at most one item, each item goes to at most one agent
-        3. Individual Rationality (Bidders): Unassigned bidders get at least their outside option
-        4. Individual Rationality (Items): Unassigned items get at least their outside option
+        2. Feasibility: each agent gets at most one item, each item goes to at most one agent
+        3. Outside slack (Bidders): unmatched bidders have payoff at most u_0 + eps
+        4. Outside slack (Items): unmatched items have payoff at most v_0 + eps
+
+        The returned assignment matrix contains only real pairs. Unmatched rows and
+        columns are interpreted as outside-option assignments by diagnostics. This is
+        weaker than the exact terminal completion certificate checked by
+        terminal_completion_certificate.
         
         Args:
             u_i (torch.Tensor): Bidder utilities of shape (num_i,)
@@ -127,6 +132,36 @@ class ITUauction:
             print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
 
         return CS, feas, IR_i, IR_j
+
+    def terminal_completion_certificate(self, v_j, mu_i_j, eps, outside_tol=0.0):
+        """
+        Check the exact object-side outside-completion certificate.
+
+        The certificate holds when every unmatched real item has payoff exactly v_0
+        up to outside_tol, and all item payoffs satisfy the target lower bound
+        v_j >= v_0 - eps. When this is true, unmatched items can be completed with
+        the outside option in the augmented matching.
+
+        Args:
+            v_j (torch.Tensor): Item payoffs of shape (num_j,)
+            mu_i_j (torch.Tensor): Binary real-pair assignment matrix of shape
+                (num_i, num_j)
+            eps (float): Target tolerance for the item-side lower bound
+            outside_tol (float, optional): Absolute tolerance for testing v_j = v_0
+                on unmatched items. Defaults to 0.0 for the exact certificate.
+
+        Returns:
+            bool: Whether the terminal completion certificate holds.
+        """
+        matched_j = mu_i_j.sum(dim=0) > 0
+        lower_ok = torch.all(v_j >= self.v_0 - eps - outside_tol)
+
+        if torch.all(matched_j):
+            outside_ok = torch.tensor(True, device=v_j.device)
+        else:
+            outside_ok = torch.all(torch.abs(v_j[~matched_j] - self.v_0) <= outside_tol)
+
+        return bool(lower_ok and outside_ok)
 
 
     # Forward auction
@@ -443,7 +478,14 @@ class ITUauction:
 
 
     # Scaling method
-    def forward_reverse_scaling(self, eps_init, eps_target, scaling_factor):
+    def forward_reverse_scaling(
+        self,
+        eps_init,
+        eps_target,
+        scaling_factor,
+        certify_terminal=False,
+        certificate_tol=0.0,
+    ):
         """
         Run the forward-reverse auction with epsilon-scaling for improved convergence.
         
@@ -459,6 +501,14 @@ class ITUauction:
             eps_target (float): Target epsilon value (final precision)
             scaling_factor (float): Factor by which to reduce epsilon each iteration
                                  (should be between 0 and 1)
+            certify_terminal (bool, optional): If True, require the exact terminal
+                                 outside-completion certificate after the warm cleanup.
+                                 If it fails, run a cold-start forward auction at the
+                                 final epsilon. Defaults to False to preserve the
+                                 historical warm implementation used by experiments.
+            certificate_tol (float, optional): Absolute tolerance used only when
+                                 certify_terminal=True to test unmatched item payoffs
+                                 against v_0. Defaults to 0.0.
         
         Returns:
             tuple: (u_i, v_j, mu_i_j) where:
@@ -479,6 +529,8 @@ class ITUauction:
             This method is typically the recommended approach for solving ITU auction
             problems as it combines the strengths of both forward and reverse auctions
             while using epsilon-scaling to improve convergence speed and solution quality.
+            With certify_terminal=True, the final output is forced to satisfy the exact
+            object-side outside-completion certificate used in the theory draft.
         """
         eps = eps_init
         v_j = self.init_v_j.clone()
@@ -496,12 +548,17 @@ class ITUauction:
         mu_i[violations_i] = -1
 
         u_i, v_j, mu_i_j  = self.forward_auction(init_v_j = v_j, init_mu_i= mu_i, eps= eps, return_mu_i_j= True)
-        # u_i, v_j, mu_i_j  = self.forward_auction(init_v_j = v_j, eps= eps, return_mu_i_j= True)
 
+        if certify_terminal and not self.terminal_completion_certificate(
+            v_j, mu_i_j, eps=eps, outside_tol=certificate_tol
+        ):
+            u_i, v_j, mu_i_j = self.forward_auction(
+                init_v_j=self.init_v_j.clone(),
+                eps=eps,
+                return_mu_i_j=True,
+            )
 
         return u_i, v_j, mu_i_j
-
-
 
 
 
